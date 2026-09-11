@@ -23,7 +23,9 @@ from vipl.utils.exp_utils import compute_lpips
 
 class ZeroNVSModel(BaseAugModel):
 
-    def __init__(self, checkpoint, config, zeronvs_params, debug_resize=False, device="cuda"):
+    def __init__(self, checkpoint, config, zeronvs_params, debug_resize=False, device="cuda", return_best_on_lpips_fail=True):
+        # augment() already always returns the best-scoring attempt rather than
+        # falling back to the original image, regardless of this flag.
         self.device = device
         self.checkpoint = checkpoint
         self.config = config
@@ -31,11 +33,12 @@ class ZeroNVSModel(BaseAugModel):
         self.guidance = self._setup_zeronvs_model(pretrained_checkpoint=checkpoint, pretrained_config=config)
         self.zeronvs_params = dict()
         # defaults
-        self.zeronvs_params["ddim_steps"] = 250 
+        self.zeronvs_params["ddim_steps"] = 250
         self.zeronvs_params["ddim_eta"] = 1.0
         self.zeronvs_params["lpips_loss_threshold"] = 0.9
         self.zeronvs_params["num_tries"] = 5
         self.zeronvs_params["fov_deg"] = 45
+        self.zeronvs_params["guidance_scale"] = 7.5
         # defaults
         self.zeronvs_params.update(zeronvs_params) # use passed args to override zeronvs default params
         print("ZeroNVS precomputed scale: ", self.zeronvs_params["precomputed_scale"])
@@ -56,6 +59,10 @@ class ZeroNVSModel(BaseAugModel):
         if self.debug_resize:
             original_image = original_image.resize((84, 84))
             original_image = original_image.resize((256, 256))
+        elif original_image.size != (256, 256):
+            # the network always operates at 256x256, and the LPIPS guard below
+            # compares against original_image pixel-for-pixel, so sizes must match
+            original_image = original_image.resize((256, 256))
 
         if original_camera is None:
             original_camera = np.eye(4)
@@ -64,8 +71,10 @@ class ZeroNVSModel(BaseAugModel):
         original_camera = self.convert_cam2world_to_opengl(original_camera, convention)
         target_camera = self.convert_cam2world_to_opengl(target_camera, convention)
 
-        lpips_loss = 1
+        lpips_loss = float("inf")
         num_tries = 0
+        best_image = None
+        best_lpips_loss = float("inf")
         while lpips_loss > self.zeronvs_params["lpips_loss_threshold"] and num_tries < self.zeronvs_params["num_tries"]:
             next_obs_augmented = self._perform_nvs(
                 guidance=self.guidance,
@@ -75,6 +84,7 @@ class ZeroNVSModel(BaseAugModel):
                 ddim_steps=self.zeronvs_params["ddim_steps"],
                 ddim_eta=self.zeronvs_params["ddim_eta"],
                 scene_scale=self.zeronvs_params["precomputed_scale"],
+                guidance_scale=self.zeronvs_params["guidance_scale"],
             )
             lpips_loss = compute_lpips(
                 lpips=self.lpips,
@@ -82,18 +92,20 @@ class ZeroNVSModel(BaseAugModel):
                 image2=next_obs_augmented,
             )
             print("LPIPS is: ", lpips_loss)
+            if lpips_loss < best_lpips_loss:
+                best_lpips_loss = lpips_loss
+                best_image = next_obs_augmented
             num_tries += 1
-        if lpips_loss < self.zeronvs_params["lpips_loss_threshold"]:
-            return next_obs_augmented
-        else:
-            return original_image
+        # return the best-scoring attempt seen across all tries, even if none
+        # passed the threshold, rather than discarding all of them
+        return best_image
 
     def _setup_zeronvs_model(self, pretrained_checkpoint, pretrained_config):
         guidance_cfg = dict(
             pretrained_model_name_or_path=pretrained_checkpoint,
             pretrained_config=pretrained_config,
             guidance_scale=7.5,
-            cond_image_path="/viscam/projects/vipl/nextnvs/motorcycle.png",  # unused
+            cond_image_path="/home/puneeth/Desktop/VISTA_Data/misc/dummy_cond_rgba.png",  # unused
             min_step_percent=[0, .75, .02, 1000],
             max_step_percent=[1000, 0.98, 0.025, 2500],
             vram_O=False

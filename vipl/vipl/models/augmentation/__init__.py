@@ -1,4 +1,11 @@
-from vipl.utils.constants import ZERONVS_CONFIG_PATH, ZERONVS_CHECKPOINT_PATH, ZERONVS_MIMICGEN_PATH, ZERONVS_DROID_PATH
+from vipl.utils.constants import (
+    ZERONVS_CONFIG_PATH,
+    ZERONVS_CHECKPOINT_PATH,
+    ZERONVS_MIMICGEN_PATH,
+    ZERONVS_DROID_PATH,
+    ZERONVS_ROBOT_6TASK_CONFIG_PATH,
+    ZERONVS_ROBOT_6TASK_40K_PATH,
+)
 
 def get_model_by_name(name, **kwargs):
     # TODO Fix kwargs for zeronvs (the way the dict and the kwargs to this function interact is unintuitive...)
@@ -75,6 +82,20 @@ def get_model_by_name(name, **kwargs):
                 ddim_eta=1.0,
                 precomputed_scale=precomputed_scale,
                 lpips_loss_threshold=0.5,
+            ),
+            **kwargs
+        )
+    elif name == "zeronvs_robot_6task_40k":
+        from vipl.models.augmentation.zeronvs_aug import ZeroNVSModel
+        return ZeroNVSModel(
+            checkpoint=ZERONVS_ROBOT_6TASK_40K_PATH,
+            config=ZERONVS_ROBOT_6TASK_CONFIG_PATH,
+            zeronvs_params=dict(
+                ddim_steps=250,
+                ddim_eta=1.0,
+                precomputed_scale=0.52,
+                guidance_scale=3.0,
+                lpips_loss_threshold=0.9,
             ),
             **kwargs
         )

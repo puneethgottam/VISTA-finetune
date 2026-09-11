@@ -63,5 +63,22 @@ MANIFEST
 *.manifest
 *.spec
 
+# scratch/test output from interactive experimentation
+scratch_cam_test/
+scratch_run_vista_test/
 
-
+# one-off experimental images generated during testing
+frame12_znvs.png
+frame_000000.png
+frame_000012.png
+frame_000066_gaussian.png
+frame_znvs.png
+pp_e0f0.png
+pp_e0f0_novel_view.png
+pp_e0f0_novel_view_epoch40000.png
+pp_e0f0_nv.png
+pp_e0f0_vista.png
+stack_e0f0.png
+stack_e0f0_novel_view_base.png
+sweep.jpeg
+sweep_e0f0.png
